@@ -21,6 +21,7 @@ import scala.util.matching.Regex
 import com.typesafe.scalalogging.LazyLogging
 import info.vizierdb.commands.ExecutionContext
 import info.vizierdb.Vizier
+import scala.sys.process._
 
 // Note: Scala does have a ProcessBuilder.  However, Scala's ProcessBuilder
 // (inherited from SBT) is optimized for shell-like streaming pipes between 
@@ -75,11 +76,10 @@ class PythonProcess(python: JProcess)
 object PythonProcess 
   extends LazyLogging
 {
-  var PYTHON_COMMAND = "python3"
   val JAR_PREFIX = "^jar:(.*)!(.*)$".r
   val FILE_PREFIX = "f".r
 
-  def udfBuilder = PythonUDFBuilder(Some(PYTHON_COMMAND))
+  def udfBuilder = PythonUDFBuilder(Some(SystemPython))
 
   def scriptPath: String =
   {
@@ -116,32 +116,6 @@ object PythonProcess
     throw new IOException(s"Python integration unsupported: Unknown access method for __main__.py")
   }
 
-  def discoverPython()
-  {
-    val searchAt = Seq(
-      "python3",
-      "/usr/bin/python3",
-      "/usr/local/bin/python3",
-      s"${System.getProperty("user.home")}/.pyenv/bin/python3"
-    )
-    PYTHON_COMMAND = searchAt.find { test => 
-      try {
-        val ret = run("print(\"Hi!\")", pythonPath = test)
-        logger.trace(s"Discovering Python ($test -> '$ret')")
-        ret.equals("Hi!")
-      } catch {
-        case e:Exception => false
-      }
-    }.getOrElse {
-      System.err.println("\nUnable to find a working python.  Python cells will not work.")
-      System.err.println("\nInstall python, or launch vizier with:")
-      System.err.println("  vizier --python path/to/your/python")
-      System.err.println("or add the following line (without quotes) to ~/.vizierdb or ~/.config/vizierdb.conf")
-      System.err.println("  \"python=path/to/your/python\"")
-      null
-    }
-  }
-
   /**
    * Packages required to use python cells.
    * 
@@ -153,17 +127,17 @@ object PythonProcess
     "bokeh"      -> "bokeh",
     "matplotlib" -> "matplotlib",
     "astor"      -> "astor",
-    "pyarrow"    -> "pyarrow<4.0.0",
+    "pyarrow"    -> "pyarrow",
     "pandas"     -> "pandas",
     "shapely"    -> "shapely",
     "pyspark"    -> "pyspark",
     "PIL"        -> "Pillow"
   )
 
-  def checkPython()
+  def checkPython(environment: PythonEnvironment = SystemPython)
   {
     // no sense checking a non-existent python install
-    if(PythonProcess.PYTHON_COMMAND == null) { return }
+    if(SystemPython.python == null) { return }
     val header = 
       """import importlib
         |def testImport(mod, lib):
@@ -189,7 +163,7 @@ object PythonProcess
                       .filter { _ != "" }
                       .map { "'"+_+"'" }
                       .mkString(" ")
-        System.err.println(s"  ${PythonProcess.PYTHON_COMMAND} -m pip install $deps")
+        System.err.println(s"  ${environment.python} -m pip install $deps")
       }
     } catch {
       case e:Throwable => 
@@ -198,10 +172,10 @@ object PythonProcess
     }
   }
 
-  def apply(): PythonProcess =
+  def apply(environment: PythonEnvironment = SystemPython): PythonProcess =
   {
     val cmd = 
-      new JProcessBuilder(PYTHON_COMMAND, scriptPath)
+      new JProcessBuilder(environment.python.toString, scriptPath)
 
     if(Vizier.config.workingDirectory.isDefined){
       cmd.directory(new File(Vizier.config.workingDirectory()))
@@ -210,14 +184,26 @@ object PythonProcess
     return new PythonProcess(cmd.start())
   }
 
-  def run(script: String, pythonPath: String = PYTHON_COMMAND): String =
+  def run(
+    script: String, 
+    environment: PythonEnvironment = SystemPython
+  ): String =
   {
     val ret = new StringBuffer()
 
-    val cmd = new JProcessBuilder(pythonPath).start()
+    val cmd = new JProcessBuilder(environment.python.toString).start()
     val out = cmd.getOutputStream()
     out.write(script.getBytes())
     out.close()
+
+    val err = 
+      Source.fromInputStream(cmd.getErrorStream())
+            .getLines()
+            .mkString("\n")
+
+    if(err != ""){
+      System.err.println(err)
+    }
 
     Source.fromInputStream(cmd.getInputStream())
           .getLines()

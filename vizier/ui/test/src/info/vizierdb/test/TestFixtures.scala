@@ -22,30 +22,33 @@ trait TestFixtures
 {
   implicit val ctx = Ctx.Owner.Unsafe
 
-  val project = new Project(1, MockAPI, autosubscribe = false)
+  val project = new Project(1, autosubscribe = false)
   project.branchSubscription = Some(MockBranchSubscription)
   project.workflow() = Some(new Workflow(MockBranchSubscription, project))
   def workflow = project.workflow.now.get
   def modules = workflow.moduleViewsWithEdits
 
+  if(Vizier.api == null){
+    Vizier.api = new API("[BASE_URL]/vizier-db/api/v1")
+  }
+  if(Vizier.links == null){
+    Vizier.links = ClientURLs("[BASE_URL]")
+  }
+
   def init(workflow: serialized.WorkflowDescription = TestFixtures.defaultWorkflow) =
   {
     MockBranchSubscription.onSync(workflow)
+
   }
 
-  def appendModule(): TentativeModule =
-  {
+  def prependTentative(): TentativeModule =
+    modules.prependTentative(Some(TestFixtures.defaultPackages))
+
+  def appendTentative(): TentativeModule =
     modules.appendTentative(Some(TestFixtures.defaultPackages))
-    val WorkflowTentativeModule(ret) = modules.last
-    return ret
-  }
 
-  def insertModule(n: Int): TentativeModule =
-  {
-    modules.insertTentative(n, Some(TestFixtures.defaultPackages))
-    val WorkflowTentativeModule(ret) = modules(n)
-    return ret
-  }
+  def insertTentativeAfter(element: WorkflowElement): TentativeModule =
+    modules.insertTentativeAfter(element, Some(TestFixtures.defaultPackages))
 
   def signalDelta(delta: WorkflowDelta) =
   {
@@ -56,13 +59,15 @@ trait TestFixtures
   }
 
 
-  def pushResponse[T, M](response: M)(op: => T)(implicit writes: Writes[M]): (Seq[String], T) =
+  def pushResponse[T, M](response: M)(op: => T)(implicit writes: Writes[M]): (Seq[String], Map[String, JsValue], T) =
   {
-    var request: Seq[String] = null
+    var savedRequestPath: Seq[String] = null
+    var savedRequestArgs: Map[String, JsValue] = null
     val height = MockBranchSubscription.expectedMessages.size
     MockBranchSubscription.expectedMessages.push( 
-      actualRequest => {
-        request = actualRequest
+      (requestPath, requestArgs) => {
+        savedRequestPath = requestPath
+        savedRequestArgs = requestArgs
         Json.toJson(response)
       }
     )
@@ -70,41 +75,28 @@ trait TestFixtures
     assert(MockBranchSubscription.expectedMessages.size == height, 
           s"Expecting ${Math.abs(MockBranchSubscription.expectedMessages.size - height)} ${if(MockBranchSubscription.expectedMessages.size > height){ "fewer" } else { "more" }} messages than were sent."
         )
-    return (request, ret)
+    return (savedRequestPath, savedRequestArgs, ret)
   }
 
 
 
   object MockBranchSubscription
-    extends BranchSubscription(project, 1, Vizier.api)
+    extends BranchSubscription(project, 1)
   {
 
-    val expectedMessages = mutable.Stack[Seq[String] => JsValue]()
+    val expectedMessages = mutable.Stack[(Seq[String], Map[String, JsValue]) => JsValue]()
 
     override def getSocket(): dom.WebSocket =
     {
       return null
     }
 
-    def makeRequest(request: Seq[String]): Promise[JsValue] =
+    override def makeRequest(leafPath: Seq[String], args: Map[String, JsValue]): Future[JsValue] =
     {
       assert(expectedMessages.size > 0, "Unexpected message sent")
       val handleRequest = expectedMessages.pop()
-      return MockPromise(handleRequest(request))
+      return MockPromise(handleRequest(leafPath, args)).future
     }
-  }
-
-  object MockAPI
-    extends API("")
-  {
-    override def packages(): Future[Seq[serialized.PackageDescription]] =
-      MockFuture(TestFixtures.defaultPackages)
-
-    def project(projectId: Identifier): Future[serialized.ProjectDescription] =
-      ???
-
-    def branch(projectId: Identifier, branchId: Identifier): Future[serialized.BranchDescription] =
-      ???
   }
 }
 
@@ -144,8 +136,7 @@ object TestFixtures
           "output" -> JsString("foo")
         )
       ),
-      datasets = Seq(),
-      dataobjects = Seq(),
+      artifacts = Seq(),
       readOnly = false,
       createdAt = new js.Date(),
       action = "create",

@@ -33,5 +33,11 @@ object Metadata extends SQLSyntaxSupport[Metadata]
 
   def put(key: String, value: String)(implicit session: DBSession) = 
     sql"INSERT OR REPLACE INTO Metadata(key, value) VALUES($key, $value)".execute.apply()
+
+  def all(implicit session: DBSession): Map[String, String] = 
+    sql"SELECT key, value FROM Metadata"
+      .map { result => result.string(1) -> result.string(2) }
+      .list()
+      .toMap
 }
 

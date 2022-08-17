@@ -14,6 +14,7 @@ $button_shadow: #bbb;
 /****** Color Scheme - Revised ******/
 $color_primary:                #214478;
 $color_primary_highlight:      #2e6098;
+$color_primary_faded:          #689eda;
 
 $color_done:                   #488ec8; // #36338d;
 $color_error:                  #9d284c;
@@ -57,7 +58,7 @@ $table_gutter_layer: 1;
 $toc_layer: 10;
 $tooltip_layer: 1250;
 $inter_module_hover_layer: $tooltip_layer;
-$menu_layer: 1500;
+$menu_layer: 2500;
 $modal_layer: 2000;
 
 /*********** Sizes ***************/
@@ -475,6 +476,11 @@ $menu_height: 32px;
           // cursor: not-allowed;
         }
 
+      }
+
+      &:hover
+      {
+        visibility: visible;
       }
     }
 
@@ -1228,15 +1234,26 @@ div.modal_background
 
 /* The last child of a parameter list is a "template" placeholder to allow
    adding more records by just typing */
-table.parameter_list tbody tr:last-child
+table.parameter_list 
 {
-  opacity: 0.6;
+  tbody tr:last-child
+  {
+    opacity: 0.6;
+
+    button.delete_row
+    {
+      display: none;
+    }
+  }
+
+  // Keep the labels for accessibility's sake, but don't include them
+  // in the layout.
+  td label
+  {
+    display: none;
+  }
 }
 
-table.parameter_list tbody tr:last-child button.delete_row
-{
-  visibility: hidden;
-}
 
 
 .editor_actions
@@ -1375,6 +1392,226 @@ table.parameter_list tbody tr:last-child button.delete_row
       {
         margin-left: 10px;
         flex: 1 1 auto;
+      }
+    }
+  }
+}
+
+/************ History Panel ************/
+
+.history 
+{
+  width:      400px;
+  max-height: 400px;
+  overflow-y: scroll;
+  // background-color: white;
+  padding: 8px;
+  padding-bottom: 16px;
+
+  .workflow
+  {
+    display: flex;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+
+    a
+    {
+
+      i.fa
+      {
+        flex-grow: 0;
+        flex-shrink: 0;
+        border-radius: 4px;
+        border: solid 1px $color_artifact_button_border;
+        padding: 2px;
+        font-size: 12px;
+        margin-right: 4px;
+        color: $color_artifact_button;
+        background-color: $color_artifact_button_bg;
+      }
+
+      &:active i.fa
+      {
+        transform: scale(0.95);
+      }
+    }
+
+
+    .description
+    {
+      margin-left: 4px;
+      flex-grow: 1;
+    }
+
+    a
+    {
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+
+    &:nth-child(2n)
+    {
+      background-color: $color_row_highlight;
+    }
+  }
+}
+
+/************ Settings Page ************/
+
+.settings
+{
+  max-width: 720px;
+  min-width: 300px;
+  margin-right: auto;
+  margin-left: auto;
+  margin-top: 16px;
+
+  .tabs
+  {
+    height: 36px;
+    width: 100%;
+    background-color: white;
+    display: flex;
+    flex-direction: row;
+
+    span.reactive
+    {
+      flex-grow: 0;
+    }
+
+    .tab {
+      color: white;
+      height: calc(100% - 8px);
+      margin-right: 4px;
+      vertical-align: middle;
+      padding-left: 16px;
+      padding-right: 16px;
+      padding-top: 8px;
+      font-weight: bold;
+      cursor: pointer;
+
+      &.active 
+      {
+        background-color: $color_primary;
+      }
+
+      &.inactive
+      {
+        background-color: $color_primary_faded;
+        height: calc(100% - 10px);
+      }
+    }
+
+    .spacer
+    {
+      flex-grow: 1;
+    }
+  }
+
+  .content
+  {
+    border: solid 2px $color_primary;
+    padding: 8px;
+
+    .reactive
+    {
+      display: block;
+      width: 100%;
+      .loading
+      {
+        display: block;
+        text-align: center;
+      }
+    }
+
+    .group
+    {
+      margin-top: 16px;
+
+      &:nth-child(1)
+      {
+        margin-top: 0px;
+      }
+
+      .title
+      {
+        font-size: 140%;
+        font-weight: bold;
+      }
+
+      .description
+      {
+        font-size: 80%;
+        margin-left:  32px;
+        margin-right: 32px;
+        margin-top: 4px;
+        margin-bottom: 4px;
+        padding: 4px;
+
+        border: solid 1px #ddd;
+        border-radius: 4px;
+        background-color: #f6f6f6;
+        color: grey;
+      }
+
+      .setting
+      {
+
+        padding-top: 4px;
+        padding-bottom: 4px;
+
+        // &:nth-child(2n+1)
+        // {
+        //   background-color: $color_row_highlight;
+        // }
+
+        label
+        {
+          display: inline-block;
+          width: 200px;
+          text-align: right;
+          padding-right: 8px;
+          font-weight: bold;
+        }
+
+        input[type="checkbox"]
+        {
+          margin-left: 0px;
+        }
+
+        input[type="text"]
+        {
+          width: calc(100% - 220px);
+        }
+      }
+
+      button
+      {
+        margin-left: calc(100% - 154px);
+        height: 32px;
+        width: 150px;
+        border-radius: 0px;
+        border: none;
+        color: white;
+        font-weight: bold;
+        background-color: grey;
+        transition-property: transform;
+        transition-duration: 0.1;
+        cursor: pointer;
+
+        &.changed 
+        {
+          background-color: $color_button_confirm;
+        }
+
+        &:active
+        {
+          transform: scale(0.95);
+        }
+
+
       }
     }
   }

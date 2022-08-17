@@ -20,7 +20,7 @@ import info.vizierdb.serialized.ProjectList
 import info.vizierdb.serialized.PropertyList
 import info.vizierdb.ui.components.dataset.Dataset
 import info.vizierdb.ui.components.MenuBar
-import info.vizierdb.ui.components.SettingsView
+import info.vizierdb.ui.components.settings.SettingsView
 import info.vizierdb.ui.components.dataset.TableView
 import info.vizierdb.nativeTypes
 import info.vizierdb.ui.widgets.Spinner
@@ -79,8 +79,6 @@ object Vizier
   {
 
   }
-
-  dom.experimental.Notification.requestPermission((x: String) => Unit)
   
   @JSExport("project_view")
   def projectView(): Unit = 
@@ -105,6 +103,11 @@ object Vizier
                       }
                     }
                     evt.stopPropagation()
+                  } else if (evt.keyCode == 116 /* f5 */) {
+                    // disable reload https://github.com/VizierDB/vizier-scala/issues/159
+                    evt.preventDefault()
+                  // } else {
+                  //   println(s"KEY: ${evt.keyCode}")
                   }
                 })
 
@@ -270,7 +273,7 @@ object Vizier
   @JSExport("settings")
   def settings(): Unit =
   {
-    val settings = new SettingsView()
+    val settings = new SettingsView(arguments.get("tab"))
     document.addEventListener("DOMContentLoaded", { (e: dom.Event) => 
       document.body.appendChild(settings.root)
       OnMount.trigger(document.body)

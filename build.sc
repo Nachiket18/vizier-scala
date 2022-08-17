@@ -22,13 +22,11 @@ object vizier extends ScalaModule with PublishModule {
   val MIMIR_CAVEATS = ivy"org.mimirdb::mimir-caveats::0.3.6"
                           .exclude(
                             "org.slf4j" -> "*",
-                            "org.mortbay.jetty" -> "*",
                             "com.typesafe.play" -> "*",
                             "log4j" -> "*",
                           )
 
   def scalaVersion = "2.12.15"
-  def moduleDeps = Seq(vega)
 
   def repositoriesTask = T.task { super.repositoriesTask() ++ Seq(
     MavenRepository("https://maven.mimirdb.org/"),
@@ -46,10 +44,10 @@ object vizier extends ScalaModule with PublishModule {
 
   def sources = T.sources(
     millSourcePath / "backend" / "src",
-    millSourcePath / "shared-src"
+    millSourcePath / "shared" / "src"
   )
   def resources = T.sources(
-    millSourcePath / "resources",
+    millSourcePath / "shared" / "resources",
     ui.resourceDir()
   )
 
@@ -80,8 +78,12 @@ object vizier extends ScalaModule with PublishModule {
     ivy"org.rogach::scallop:3.4.0",
 
     ////////////////////// API Support /////////////////////
-    ivy"javax.servlet:javax.servlet-api:3.1.0",
-    ivy"org.eclipse.jetty.websocket:websocket-server:9.4.44.v20210927",
+    ivy"com.typesafe.akka::akka-http:10.2.9",
+    ivy"de.heikoseeberger::akka-http-play-json:1.39.2",
+    ivy"ch.megard::akka-http-cors:1.1.3",
+    ivy"com.typesafe.akka::akka-stream:2.6.19",
+    ivy"com.typesafe.akka::akka-actor:2.6.19",
+    ivy"com.typesafe.akka::akka-actor-typed:2.6.19",
 
     ////////////////////// Command-Specific Libraries //////
     // Json Import
@@ -100,6 +102,9 @@ object vizier extends ScalaModule with PublishModule {
     ivy"org.geotools:gt-main:24.0",
     ivy"org.geotools:gt-referencing:24.0",
     ivy"org.geotools:gt-epsg-hsql:24.0",
+
+    // Charts
+    ivy"info.vizierdb::vega:1.0.0",
 
     // Scala Cell
     ivy"org.scala-lang:scala-compiler:${scalaVersion}",
@@ -142,12 +147,12 @@ object vizier extends ScalaModule with PublishModule {
 /*************************************************
  *** Backend Resources
  *************************************************/
-  def buildRoutesScript = T.sources { os.pwd / "scripts" / "build_routes.py" }
-  def routesFile        = T.sources { millSourcePath / "resources" / "vizier-routes.txt" }
+  def buildRoutesScript = T.sources { os.pwd / "scripts" / "build_routes.sc" }
+  def routesFile        = T.sources { millSourcePath / "shared" / "resources" / "vizier-routes.txt" }
 
   def routes = T { 
     println("Recompiling routes from "+routesFile().head.path); 
-    os.proc("python3", buildRoutesScript().head.path.toString)
+    os.proc("amm", buildRoutesScript().head.path.toString)
                                           .call( stdout = os.Inherit, stderr = os.Inherit) 
   }
 
@@ -190,7 +195,7 @@ object vizier extends ScalaModule with PublishModule {
 
     def sources = T.sources(
       millSourcePath / "src",
-      vizier.millSourcePath / "shared-src"
+      vizier.millSourcePath / "shared" / "src"
     )
   
     override def compile = T {
@@ -326,29 +331,6 @@ object vizier extends ScalaModule with PublishModule {
       println(s"Generated UI resource dir: $target")
       target
     }
-  }
-
-  object vega extends ScalaModule with PublishModule {
-    def publishVersion = vizier.VERSION
-    def scalaVersion = vizier.scalaVersion
-
-    def sources = T.sources(
-      vizier.millSourcePath / "vega-src"
-    )
-
-    override def pomSettings = PomSettings(
-      description = "Vizier Vega/Vega-Lite Support",
-      organization = "info.vizierdb",
-      url = "http://vizierdb.info",
-      licenses = Seq(License.`Apache-2.0`),
-      versionControl = VersionControl.github("vizierdb", "vizier-scala"),
-      developers = Seq(
-        Developer("okennedy", "Oliver Kennedy", "https://odin.cse.buffalo.edu"),
-      )
-    )
-    def ivyDeps = Agg(
-      vizier.PLAY_JS
-    )
   }
 }
 

@@ -19,6 +19,7 @@ import info.vizierdb.serializers._
 import scala.util.{ Success, Failure }
 import info.vizierdb.ui.components.Project
 import info.vizierdb.ui.Vizier
+import info.vizierdb.ui.widgets.SystemNotification
 
 class BranchSubscription(
   project: Project, 
@@ -78,7 +79,7 @@ class BranchSubscription(
     modules ++= workflow.modules
                         .zipWithIndex
                         .map { case (initialState, idx) =>
-                          new ModuleSubscription(initialState, Left(this), idx) 
+                          new ModuleSubscription(initialState, Left(this), Var(idx))
                         }
     awaitingReSync() = false
   }
@@ -118,12 +119,12 @@ class BranchSubscription(
           /*************************************************************/
 
           case websocket.NormalWebsocketResponse(id, message) => 
-            Client.reportSuccess(id, message)
+            reportSuccess(id, message)
 
           /*************************************************************/
 
           case websocket.ErrorWebsocketResponse(id, error, detail) =>
-            Client.reportError(id, error, detail)
+            reportError(id, error, detail)
 
           /*************************************************************/
 
@@ -135,27 +136,31 @@ class BranchSubscription(
               case delta.InsertCell(cell, position) =>
                 modules.insert(
                   position,
-                  new ModuleSubscription(cell, Left(this), position)
+                  new ModuleSubscription(cell, Left(this), Var(position))
                 )
-                modules.drop(position)
-                  .zipWithIndex
-                  .foreach { case (module, offset) => module.position = position+offset }
+                modules.drop(position+1)
+                       .zipWithIndex
+                       .foreach { case (module, offset) => 
+                          module.position() = position+offset+1
+                        }
 
               /////////////////////////////////////////////////
 
               case delta.UpdateCell(cell, position) => 
                 modules.update(
                   position,
-                  new ModuleSubscription(cell, Left(this), position)
+                  new ModuleSubscription(cell, Left(this), Var(position))
                 )
              
               /////////////////////////////////////////////////
 
               case delta.DeleteCell(position) =>
                 modules.remove(position)
-                modules.drop(position-1)
+                modules.drop(position)
                        .zipWithIndex
-                       .foreach { case (module, offset) => module.position = position+offset }
+                       .foreach { case (module, offset) => 
+                          module.position() = position+offset 
+                        }
              
               /////////////////////////////////////////////////
 
@@ -168,8 +173,9 @@ class BranchSubscription(
                   val timeToExecute = executionEndTime - executionStartTime
                   logger.debug(s"Cell @ ${position} executed in ${timeToExecute / 1000.0} seconds")
                   if(timeToExecute > maxTimeWithoutNotification && dom.experimental.Notification.permission == "granted") {
-                    val notificationBody: js.UndefOr[String] = s"${(modules(position).toc).get.title} DONE"
-                    val notification = new dom.experimental.Notification("VizierDB", dom.experimental.NotificationOptions(notificationBody))
+                    SystemNotification(SystemNotification.Mode.SLOW_CELL_FINISHED)(
+                      s"${(modules(position).toc).get.title} DONE"
+                    )
                   }
                   executionStartTime = -1
                 } else {
@@ -232,42 +238,46 @@ class BranchSubscription(
         }
   }
 
+  val BASE_PATH = Seq("info", "vizierdb", "api", "websocket", "BranchWatcherAPI")
+  var nextMessageId = 0l;
+  val messageCallbacks = mutable.Map[Long, Promise[JsValue]]()
+
+  def reportSuccess(id: Long, message: JsValue) =
+    messageCallbacks.remove(id) match {
+      case Some(promise) => promise.success(message)
+      case None => logger.warn(s"Response to unsent messageId: ${id}")
+    }
+
+  def reportError(id: Long, error: String, detail: Option[String] = None) =
+    messageCallbacks.remove(id) match {
+      case Some(promise) => logger.warn(s"Error Response: $error"); 
+                            promise.failure(new Exception(error))
+      case None => logger.warn(s"ERROR Response to unsent messageId: ${id}")
+    }
+
+  def logRequest: (Long, Future[JsValue]) =
+  {
+    val id = nextMessageId; 
+    nextMessageId += 1
+    val response = Promise[JsValue]()
+    messageCallbacks.put(id, response) 
+    return (id, response.future)
+  }
+
+  def makeRequest(leafPath: Seq[String], args: Map[String, JsValue]): Future[JsValue] =
+  {
+    val (id, response) = logRequest
+    val request = websocket.WebsocketRequest(id, BASE_PATH++leafPath, args)
+    logger.trace(s"${request.path.mkString("/")} <- Request ${request.id}")
+    socket.send(Json.toJson(request).toString)
+    return response
+  }
+
+
   object Client extends BranchWatcherAPIProxy
   {
-    var nextMessageId = 0l;
-    val messageCallbacks = mutable.Map[Long, Promise[JsValue]]()
-    val BASE_PATH = Seq("info", "vizierdb", "api", "websocket", "BranchWatcherAPI")
-
-    def reportSuccess(id: Long, message: JsValue) =
-      messageCallbacks.remove(id) match {
-        case Some(promise) => promise.success(message)
-        case None => logger.warn(s"Response to unsent messageId: ${id}")
-      }
-
-    def reportError(id: Long, error: String, detail: Option[String] = None) =
-      messageCallbacks.remove(id) match {
-        case Some(promise) => logger.warn(s"Error Response: $error"); 
-                              promise.failure(new Exception(error))
-        case None => logger.warn(s"ERROR Response to unsent messageId: ${id}")
-      }
-
-    def logRequest: (Long, Future[JsValue]) =
-    {
-      val id = nextMessageId; 
-      nextMessageId += 1
-      val response = Promise[JsValue]()
-      messageCallbacks.put(id, response) 
-      return (id, response.future)
-    }
-
     def sendRequest(leafPath: Seq[String], args: Map[String, JsValue]): Future[JsValue] =
-    {
-      val (id, response) = logRequest
-      val request = websocket.WebsocketRequest(id, BASE_PATH++leafPath, args)
-      logger.trace(s"${request.path.mkString("/")} <- Request ${request.id}")
-      socket.send(Json.toJson(request).toString)
-      return response
-    }
+      makeRequest(leafPath, args)
 
     def ping(): Future[Long] =
       sendRequest(Seq("ping"), Map.empty).map { _.as[Long] }

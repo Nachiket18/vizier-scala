@@ -16,8 +16,14 @@ __pycache__
 /node_modules
 .coursier
 /vizier/backend/src/info/vizierdb/api/servlet/VizierAPIServletRoutes.scala
+/vizier/backend/src/info/vizierdb/api/akka/AllRoutes.scala
+/vizier/backend/src/info/vizierdb/api/akka/RoutesFor*.scala
 /vizier/backend/src/info/vizierdb/api/websocket/BranchWatcherAPIRoutes.scala
 /vizier/ui/src/info/vizierdb/ui/network/BranchWatcherAPIProxy.scala
 /vizier/ui/src/info/vizierdb/ui/network/API.scala
 /mill.*
 /.ammonite
+/vizier/shared/resources/vizier.swagger
+/vizier/shared/resources/swagger
+/.vizier-cache
+/package-lock.json

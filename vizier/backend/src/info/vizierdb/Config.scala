@@ -24,7 +24,8 @@ class Config(arguments: Seq[String])
   extends ScallopConf(arguments)
   with LazyLogging
 {
-  version("Vizier-Scala 2.0.0-SNAPSHOT (c) 2021 U. Buffalo, NYU, Ill. Inst. Tech., and Breadcrumb Analytics")
+  val VERSION = "2.0.0-SNAPSHOT"
+  version(s"Vizier-Scala $VERSION (c) 2021 U. Buffalo, NYU, Ill. Inst. Tech., and Breadcrumb Analytics")
   banner("""Docs: https://github.com/VizierDB/vizier-scala/wiki
            |Usage: vizier [OPTIONS]
            |    or vizier import [OPTIONS] export
@@ -57,10 +58,9 @@ class Config(arguments: Seq[String])
                   .orElse { Some(5000) }
   )
   val pythonPath = opt[String]("python", 
-    descr = "Path to python binary",
+    descr = "Path to python binary (default: search for one)",
     default = 
       Option(defaults.getProperty("python"))
-          .orElse { Some(info.vizierdb.commands.python.PythonProcess.PYTHON_COMMAND) }
   )
   val publicURL = opt[String]("public-url",
     descr = "The Public-Facing URL of Vizier (e.g., for use with proxies)",
@@ -118,8 +118,21 @@ class Config(arguments: Seq[String])
     ),
   )
 
+  val cacheDirOverride = opt[File]("cache-dir",
+    descr = "Set vizier's cache directory (default ./.vizier-cache)"
+  )
+
+  val warehouseDirOverride = opt[File]("spark-warehouse-dir",
+    descr = "Set the SparkSQL warehouse directory (default: {cache-dir}/spark-warehouse)"
+  )
+
   def workingDirectoryFile = 
     new File(workingDirectory.getOrElse("."))
+  
+  lazy val cacheDirFile = 
+    cacheDirOverride.getOrElse { 
+                      new File(workingDirectoryFile, ".vizier-cache")
+                    }
 
   val sparkHost = opt[String]("spark-host",
     descr = "Spark master node",
@@ -131,6 +144,7 @@ class Config(arguments: Seq[String])
   val stagingDir = "staging"
   val stagingDirIsRelativeToDataDir = true
   lazy val dataDirFile = new File(dataDir)
+  lazy val pythonVenvDirFile = new File(cacheDirFile, "python")
 
   def resolveToDataDir(path: String) = { new File(dataDirFile, path).getAbsoluteFile }
 
